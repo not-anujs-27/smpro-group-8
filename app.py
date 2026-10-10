@@ -100,13 +100,21 @@ elif p > 1:
 # ---------------------------------------------------------
 # Tabbed Engineering Analysis
 # ---------------------------------------------------------
-tab_telemetry, tab_binomial, tab_poisson, tab_geometric, tab_advisory = st.tabs(
+(
+    tab_telemetry,
+    tab_binomial,
+    tab_poisson,
+    tab_geometric,
+    tab_advisory,
+    tab_methodology,
+) = st.tabs(
     [
         "Telemetry & Correlation",
         "Binomial Capacity",
         "Poisson Arrivals",
         "Geometric Wait Time",
         "Advisory Matrix",
+        "Methodology Guide",
     ]
 )
 
@@ -274,40 +282,58 @@ with tab_poisson:
         {"Events_k": pois_range, "Binomial": bin_probs, "Poisson": pois_probs}
     )
 
-    fig_comp, ax_comp = plt.subplots(figsize=(10, 4.5))
-    x_indices = np.arange(len(pois_range))
-    bar_width = 0.35
+    col_p1, col_p2 = st.columns([3, 1])
 
-    ax_comp.bar(
-        x_indices - bar_width / 2,
-        df_compare["Binomial"],
-        width=bar_width,
-        label="Binomial (True Finite)",
-        color="#337ab7",
-        alpha=0.85,
-    )
-    ax_comp.bar(
-        x_indices + bar_width / 2,
-        df_compare["Poisson"],
-        width=bar_width,
-        label="Poisson (Arrival Rate λ)",
-        color="#f0ad4e",
-        alpha=0.85,
-    )
+    with col_p1:
+        fig_comp, ax_comp = plt.subplots(figsize=(10, 4.5))
+        x_indices = np.arange(len(pois_range))
+        bar_width = 0.35
 
-    ax_comp.set_xlabel("Number of Events (k)")
-    ax_comp.set_ylabel("Probability Mass")
-    ax_comp.set_title(f"Binomial vs. Poisson Convergence (λ = {lam:.2f})")
-    ax_comp.set_xticks(x_indices)
-    ax_comp.set_xticklabels(pois_range)
-    ax_comp.grid(axis="y", linestyle=":", alpha=0.6)
-    ax_comp.legend()
-    st.pyplot(fig_comp)
-    plt.close(fig_comp)
+        ax_comp.bar(
+            x_indices - bar_width / 2,
+            df_compare["Binomial"],
+            width=bar_width,
+            label="Binomial (True Finite)",
+            color="#337ab7",
+            alpha=0.85,
+        )
+        ax_comp.bar(
+            x_indices + bar_width / 2,
+            df_compare["Poisson"],
+            width=bar_width,
+            label="Poisson (Arrival Rate λ)",
+            color="#f0ad4e",
+            alpha=0.85,
+        )
 
-    st.caption(
-        "Poisson models random event arrivals over time. Deviation occurs when sample size n is small and base event probability p is non-negligible."
-    )
+        ax_comp.set_xlabel("Number of Events (k)")
+        ax_comp.set_ylabel("Probability Mass")
+        ax_comp.set_title(f"Binomial vs. Poisson Convergence (λ = {lam:.2f})")
+        ax_comp.set_xticks(x_indices)
+        ax_comp.set_xticklabels(pois_range)
+        ax_comp.grid(axis="y", linestyle=":", alpha=0.6)
+        ax_comp.legend()
+        st.pyplot(fig_comp)
+        plt.close(fig_comp)
+
+        st.caption(
+            "Poisson models random event arrivals over time. Deviation occurs when sample size n is small and base event probability p is non-negligible."
+        )
+
+    with col_p2:
+        pois_risk = sum(p for y, p in zip(pois_range, pois_probs) if y > capacity_limit)
+        st.metric("Expected Arrivals (λ)", f"{lam:.2f} events")
+        st.metric("Poisson Variance", f"{lam:.2f}")
+        st.metric("Surge Risk P(Y > k_cap)", f"{pois_risk:.4f}")
+
+        if pois_risk > 0.25:
+            st.warning(
+                f"Surge Advisory: {pois_risk:.1%} chance of clustered event arrivals exceeding pump capacity."
+            )
+        else:
+            st.success(
+                f"Arrival Rate Stable: {1 - pois_risk:.1%} probability that demand stays within system limits."
+            )
 
 # ---------------------------------------------------------
 # TAB 4: Geometric Dry-Down & Waiting Time
@@ -398,3 +424,25 @@ with tab_advisory:
         file_name="irrigation_binomial_risk.csv",
         mime="text/csv",
     )
+
+
+# ---------------------------------------------------------
+# TAB 6: Methodology & Interpretation Guide
+# ---------------------------------------------------------
+with tab_methodology:
+    st.subheader("Statistical Methodology & Interpretation Guide")
+    st.markdown("""
+        This system applies three core probability distributions to transform raw environmental telemetry into actionable engineering directives.
+
+        ### 1. Binomial Distribution
+        * **Application:** Forecasting the total number of irrigation days required over a fixed planning horizon (e.g., the next 7 days).
+        * **Data Interpretation:** The Binomial PMF charts the exact probability of needing $0, 1, 2, ... n$ days of watering. If the cumulative probability of exceeding your system's maximum pumping capacity is high, it flags a severe risk of equipment failure or crop stress.
+
+        ### 2. Poisson Distribution
+        * **Application:** Modeling the arrival rate ($\\lambda$) of random, independent environmental trigger events over a continuous timeframe.
+        * **Data Interpretation:** By comparing the Poisson model to the Binomial model, we can approximate the probability of "clustered" or extreme demand surges. A high Poisson surge risk indicates an unpredictable environment requiring larger secondary water storage buffers.
+
+        ### 3. Geometric Distribution
+        * **Application:** Predicting the waiting time (in consecutive dry days) until the very first irrigation event is triggered.
+        * **Data Interpretation:** The expected value $E[Z]$ tells the maintenance team exactly how much safe lead time they have. For example, an expected wait of 4 days mathematically proves the team has a 4-day window to safely take pumps offline for preventative maintenance without disrupting the water supply.
+        """)
